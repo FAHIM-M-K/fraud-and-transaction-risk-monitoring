@@ -15,11 +15,14 @@ def compute_silver_risk_features(
 
     df_clean = spark.table(clean_tx_table)
     if target_batch_date:
-        df_clean = df_clean.filter(F.col("batch_date") == target_batch_date)
+        df_clean = df_clean.filter(
+            (F.col("batch_date") <= target_batch_date)
+            & (F.col("batch_date") >= F.date_sub(F.to_date(F.lit(target_batch_date)), 35))
+        )
 
     df_with_epoch = df_clean.withColumn("epoch_sec", F.col("timestamp").cast("long"))
 
-    w_row = Window.partitionBy("customer_id").orderBy("epoch_sec")
+    w_row = Window.partitionBy("customer_id").orderBy("epoch_sec", "tx_id")
     w_1h = Window.partitionBy("customer_id").orderBy("epoch_sec").rangeBetween(-3600, 0)
     w_24h = Window.partitionBy("customer_id").orderBy("epoch_sec").rangeBetween(-86400, 0)
     w_7d = Window.partitionBy("customer_id").orderBy("epoch_sec").rangeBetween(-604800, 0)
@@ -92,6 +95,9 @@ def compute_silver_risk_features(
         & (F.col("distance_from_prev_tx_km") > 100.0)
         & (F.col("seconds_since_prev_tx") > 0.0),
     )
+
+    if target_batch_date:
+        df_speed = df_speed.filter(F.col("batch_date") == target_batch_date)
 
     df_final_features = df_speed.select(
         F.col("tx_id").cast("string"),
