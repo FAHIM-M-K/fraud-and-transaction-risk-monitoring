@@ -77,14 +77,15 @@ def test_hybrid_risk_scorer_actions():
     assert tier_low == TIER_LOW
     assert action_low == ACTION_APPROVE
 
-    # Impossible travel penalty (+50) + moderate probability = BLOCK / CRITICAL
+    # Impossible travel (+20) + high ML probability (0.55) escalates to CHALLENGE_3DS
     score_high, pen_high, tier_high, action_high = calculate_composite_risk_score(
         ml_probability=0.55,
         is_impossible_travel=1,
     )
-    assert score_high >= 75
-    assert tier_high == TIER_CRITICAL
-    assert action_high == ACTION_BLOCK
+    assert pen_high == 20
+    assert score_high >= 40
+    assert tier_high == "ELEVATED"
+    assert action_high == ACTION_CHALLENGE
 
 
 def test_evaluate_model_performance_summary():

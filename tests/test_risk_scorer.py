@@ -24,7 +24,9 @@ def test_low_risk_transaction():
     assert action == ACTION_APPROVE
 
 
-def test_impossible_travel_triggers_elevated_or_critical():
+def test_impossible_travel_alone_does_not_force_challenge():
+    # A single geo anomaly with low ML probability should NOT trigger a challenge.
+    # Enterprise policy: geo anomalies from VPNs/roaming are common and need corroboration.
     score, penalties, tier, action = calculate_composite_risk_score(
         ml_probability=0.10,
         is_impossible_travel=1,
@@ -32,10 +34,25 @@ def test_impossible_travel_triggers_elevated_or_critical():
         amount_zscore=0.5,
         merchant_risk_tier="LOW",
     )
-    assert penalties >= 40
-    assert score >= 50
-    assert tier in (TIER_ELEVATED, TIER_CRITICAL)
-    assert action in (ACTION_CHALLENGE, ACTION_BLOCK)
+    assert penalties == 20
+    assert score < 40
+    assert tier == TIER_LOW
+    assert action == ACTION_APPROVE
+
+
+def test_impossible_travel_plus_spend_anomaly_triggers_challenge():
+    # Geo anomaly combined with an abnormal spend z-score should escalate to CHALLENGE_3DS.
+    score, penalties, tier, action = calculate_composite_risk_score(
+        ml_probability=0.10,
+        is_impossible_travel=1,
+        distinct_cards_per_device_10m=1,
+        amount_zscore=4.0,
+        merchant_risk_tier="LOW",
+    )
+    assert penalties == 45
+    assert score >= 40
+    assert tier == TIER_ELEVATED
+    assert action == ACTION_CHALLENGE
 
 
 def test_critical_multi_rule_burst():
@@ -68,15 +85,15 @@ def test_monotonic_safety_escalation_ml_block_cannot_be_downgraded():
 
 def test_rule_escalation_from_approve_to_challenge_and_block():
     # Base ML probability is 0.02 (APPROVE)
-    # 1. Impossible travel escalates APPROVE -> CHALLENGE_3DS
+    # 1. Impossible travel alone (+20) with tiny ML prob stays APPROVE
     score_1, _, tier_1, action_1 = calculate_composite_risk_score(
         ml_probability=0.02,
         is_impossible_travel=1,
     )
-    assert action_1 == ACTION_CHALLENGE
-    assert tier_1 == TIER_ELEVATED
+    assert action_1 == ACTION_APPROVE
+    assert tier_1 == TIER_LOW
 
-    # 2. Impossible travel (+50) + High Risk Merchant (+20) + Distinct Cards (+40) escalates to BLOCK
+    # 2. Impossible travel (+20) + High Risk Merchant (+20) + Distinct Cards (+35) escalates to BLOCK
     score_2, _, tier_2, action_2 = calculate_composite_risk_score(
         ml_probability=0.02,
         is_impossible_travel=1,

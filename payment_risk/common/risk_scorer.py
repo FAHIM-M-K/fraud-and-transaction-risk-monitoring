@@ -36,7 +36,7 @@ def calculate_composite_risk_score(
     rule_penalties = 0
 
     if is_impossible_travel == 1:
-        rule_penalties += 45
+        rule_penalties += 20
 
     if distinct_cards_per_device_10m >= 5:
         rule_penalties += 35
