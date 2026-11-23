@@ -23,9 +23,11 @@ def verify_bronze_manifest_audit(
         df_m = spark.read.option("multiline", "true").json(manifest_file)
         manifest_data = json.loads(df_m.toJSON().first())
 
-    expected_count = int(manifest_data.get("record_count", 0))
-    expected_sha = str(manifest_data.get("payload_sha256", ""))
+    expected_count = int(manifest_data.get("total_records") or manifest_data.get("record_count", 0))
+    expected_sha = str(manifest_data.get("sha256_checksum") or manifest_data.get("payload_sha256", ""))
     total_volume_cents = int(manifest_data.get("total_volume_cents", 0))
+    valid_records = int(manifest_data.get("valid_records") or 0)
+    quarantined_records = int(manifest_data.get("quarantined_records") or manifest_data.get("corrupted_records", 0))
 
     bronze_table = f"{config.bronze_schema}.raw_transactions"
     df_bronze = spark.table(bronze_table).filter(F.col("batch_date") == target_date)
@@ -53,8 +55,8 @@ def verify_bronze_manifest_audit(
         {
             "batch_date": target_date,
             "total_records": expected_count,
-            "valid_records": int(manifest_data.get("valid_records", bronze_count)),
-            "quarantined_records": int(manifest_data.get("corrupted_records", 0)),
+            "valid_records": valid_records if valid_records > 0 else bronze_count,
+            "quarantined_records": quarantined_records,
             "total_volume_cents": total_volume_cents,
             "manifest_sha256": expected_sha,
             "bronze_sha256": bronze_sha,

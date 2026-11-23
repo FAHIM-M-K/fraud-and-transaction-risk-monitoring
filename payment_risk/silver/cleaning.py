@@ -72,7 +72,7 @@ def clean_and_quarantine_transactions(
             F.expr("uuid()").alias("rejection_id"),
             F.lit(bronze_tx_table).alias("source_table"),
             F.col("tx_id"),
-            F.to_json(F.struct(df_raw.columns)).alias("raw_payload"),
+            F.to_json(F.struct(*[F.col(c) for c in df_raw.columns])).alias("raw_payload"),
             F.col("rejection_reason_code"),
             F.concat_ws(
                 "; ",
@@ -101,12 +101,21 @@ def clean_and_quarantine_transactions(
             F.col("original_tx_id").alias("cb_tx_id")
         ).distinct()
 
+        clean_cols = [
+            "tx_id", "customer_id", "card_token", "card_fingerprint", "card_brand",
+            "card_type", "card_last4", "card_bin", "merchant_id", "merchant_category_code",
+            "amount_cents", "currency", "tx_status", "response_code", "decline_reason",
+            "payment_channel", "avs_code", "cvv_code", "eci", "ip_address",
+            "device_fingerprint", "latitude", "longitude", "timestamp", "is_fraud_label",
+            "processed_at", "batch_date"
+        ]
+
         df_enriched = (
             df_clean.join(df_cb, df_clean.tx_id == df_cb.cb_tx_id, "left")
             .withColumn("is_fraud_label", F.col("cb_tx_id").isNotNull())
             .withColumn("timestamp", F.col("parsed_timestamp"))
             .withColumn("processed_at", F.current_timestamp())
-            .drop("parsed_timestamp", "tx_row_num", "rejection_reason_code", "cb_tx_id", "_rescued_data", "source_file", "ingested_at")
+            .select(*clean_cols)
         )
 
         delta_silver_tx = DeltaTable.forName(spark, silver_tx_table)
