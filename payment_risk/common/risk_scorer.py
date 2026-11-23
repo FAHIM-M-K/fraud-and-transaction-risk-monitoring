@@ -223,4 +223,3 @@ def calculate_optimal_operational_threshold(
     best_metrics["three_way_cost_metrics"] = three_way_metrics
 
     return best_threshold, float(min_loss), best_metrics
-
