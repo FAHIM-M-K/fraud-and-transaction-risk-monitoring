@@ -44,19 +44,15 @@ def verify_monetary_reconciliation(
 
 
 def verify_manifest_checksum(
-    transactions: List[Dict[str, Any]],
+    records: List[Dict[str, Any]],
     expected_sha256: str,
 ) -> Tuple[bool, str, str]:
     """Verifies cryptographic SHA-256 hash match against Landing Zone manifest expectation.
 
-    Sorts records by transaction ID and computes deterministic digest over JSON payloads.
+    Matches the generator's canonical serialization: json.dumps(records, sort_keys=True, default=str).
     """
-    sorted_txs = sorted(transactions, key=lambda x: str(x.get("tx_id", "")))
-    hasher = hashlib.sha256()
-    for tx in sorted_txs:
-        line = json.dumps(tx, sort_keys=True, default=str)
-        hasher.update(line.encode("utf-8"))
-    computed_hash = hasher.hexdigest()
+    serialized = json.dumps(records, sort_keys=True, default=str)
+    computed_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
     match = computed_hash.lower() == expected_sha256.lower()
     msg = "SHA-256 match confirmed" if match else f"Checksum mismatch: computed {computed_hash} != expected {expected_sha256}"

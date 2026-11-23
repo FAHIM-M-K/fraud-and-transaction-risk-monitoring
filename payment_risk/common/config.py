@@ -8,7 +8,6 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-
 @dataclass(frozen=True)
 class LakehouseConfig:
     """Immutable configuration resolving Unity Catalog identifiers and Volume paths."""

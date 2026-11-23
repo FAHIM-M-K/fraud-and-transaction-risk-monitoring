@@ -4,10 +4,42 @@ Orchestrates Databricks Auto Loader (cloudFiles) streaming for landing zone JSON
 and watermark-based incremental JDBC extraction for dimension tables from Neon PostgreSQL.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import parse_qs, urlsplit
 from pyspark.sql import functions as F
 from payment_risk.common.config import LakehouseConfig
 from payment_risk.common.watermark import get_watermark, update_watermark
+
+
+def parse_postgres_jdbc_connection(raw_url: str) -> Tuple[str, Dict[str, str]]:
+    """Normalizes connection strings (PostgreSQL URI or JDBC URL) for PySpark JDBC.
+
+    Extracts inline credentials, hostname, port, database, and SSL options
+    so the JDBC driver connects reliably without authority credential errors.
+    """
+    url = raw_url.strip()
+    if url.startswith("jdbc:"):
+        url = url[5:]
+    p = urlsplit(url)
+    host = p.hostname or "localhost"
+    port = f":{p.port}" if p.port else ""
+    dbname = p.path.lstrip("/")
+    clean_url = f"jdbc:postgresql://{host}{port}/{dbname}"
+
+    props: Dict[str, str] = {
+        "driver": "org.postgresql.Driver",
+        "sslmode": "require",
+    }
+    if p.username:
+        props["user"] = p.username
+    if p.password:
+        props["password"] = p.password
+    if p.query:
+        params = parse_qs(p.query)
+        for k, v in params.items():
+            if v:
+                props[k] = v[0]
+    return clean_url, props
 
 
 def ingest_raw_transactions_stream(spark: Any, config: LakehouseConfig) -> Any:
@@ -128,10 +160,10 @@ def ingest_incremental_dimensions(
         Dictionary mapping source name to record count ingested.
     """
     watermark_table = f"{config.bronze_schema}._metadata_watermarks"
-    props = jdbc_properties or {
-        "driver": "org.postgresql.Driver",
-        "sslmode": "require",
-    }
+    clean_url, auto_props = parse_postgres_jdbc_connection(jdbc_url)
+    props = dict(auto_props)
+    if jdbc_properties:
+        props.update(jdbc_properties)
 
     dimension_sources = [
         ("neon_merchants", "merchants", f"{config.bronze_schema}.raw_merchants"),
@@ -144,7 +176,7 @@ def ingest_incremental_dimensions(
         query = f"(SELECT * FROM {pg_table} WHERE updated_at > '{last_watermark}') AS delta_extract"
 
         df_delta = spark.read.jdbc(
-            url=jdbc_url,
+            url=clean_url,
             table=query,
             properties=props,
         ).withColumn("ingested_at", F.current_timestamp())
