@@ -21,12 +21,11 @@ def calculate_composite_risk_score(
     distinct_cards_per_device_10m: int = 1,
     amount_zscore: float = 0.0,
     merchant_risk_tier: str = "LOW",
-    threshold_challenge: float = 0.35,
-    threshold_block: float = 0.70,
+    threshold_challenge: float = 0.40,
+    threshold_block: float = 0.80,
 ) -> Tuple[int, int, str, str]:
     prob = max(0.0, min(1.0, float(ml_probability)))
 
-    # 1. Base ML Decision
     if prob >= threshold_block:
         base_action = ACTION_BLOCK
     elif prob >= threshold_challenge:
@@ -34,17 +33,16 @@ def calculate_composite_risk_score(
     else:
         base_action = ACTION_APPROVE
 
-    # 2. Rule Penalties (Heuristics)
     rule_penalties = 0
 
     if is_impossible_travel == 1:
-        rule_penalties += 50
+        rule_penalties += 45
 
     if distinct_cards_per_device_10m >= 5:
-        rule_penalties += 40
+        rule_penalties += 35
 
     if amount_zscore > 3.5:
-        rule_penalties += 30
+        rule_penalties += 25
 
     if str(merchant_risk_tier).upper() == "HIGH":
         rule_penalties += 20
@@ -59,14 +57,11 @@ def calculate_composite_risk_score(
     else:
         score_action = ACTION_APPROVE
 
-    # 3. Monotonic Safety Escalation: Rules can escalate APPROVE -> CHALLENGE -> BLOCK,
-    # but rules can NEVER downgrade an ML BLOCK.
     if ACTION_HIERARCHY[score_action] > ACTION_HIERARCHY[base_action]:
         final_action = score_action
     else:
         final_action = base_action
 
-    # Align composite score and risk tier monotonically with the final action
     if final_action == ACTION_BLOCK:
         composite_score = max(composite_score, 75)
         risk_tier = TIER_CRITICAL

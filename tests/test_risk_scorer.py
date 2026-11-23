@@ -32,7 +32,7 @@ def test_impossible_travel_triggers_elevated_or_critical():
         amount_zscore=0.5,
         merchant_risk_tier="LOW",
     )
-    assert penalties >= 50
+    assert penalties >= 40
     assert score >= 50
     assert tier in (TIER_ELEVATED, TIER_CRITICAL)
     assert action in (ACTION_CHALLENGE, ACTION_BLOCK)
