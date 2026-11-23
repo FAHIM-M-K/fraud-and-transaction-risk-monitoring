@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 import json
+import pandas as pd
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     StructType,
@@ -72,9 +73,22 @@ def score_batch_transactions(
         if not model_uri:
             model_uri = f"models:/{model_name}/latest"
 
-        predict_udf = mlflow.pyfunc.spark_udf(spark, model_uri, result_type="double")
+        loaded_model = mlflow.pyfunc.load_model(model_uri)
         feature_cols = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
-        df_scored_prob = df_features.withColumn("ml_fraud_probability", predict_udf(*feature_cols))
+
+        @F.pandas_udf(DoubleType())
+        def predict_fraud_prob_udf(*cols: pd.Series) -> pd.Series:
+            pdf = pd.DataFrame(dict(zip(feature_cols, cols)))
+            for col in CATEGORICAL_FEATURES:
+                pdf[col] = pdf[col].astype("category")
+            raw_preds = loaded_model.predict(pdf)
+            if hasattr(raw_preds, "ndim") and raw_preds.ndim > 1:
+                probs = raw_preds[:, 1]
+            else:
+                probs = raw_preds
+            return pd.Series(probs, dtype="float64")
+
+        df_scored_prob = df_features.withColumn("ml_fraud_probability", predict_fraud_prob_udf(*feature_cols))
     except Exception:
         # Calibrated Bayesian prior based on industry baseline fraud prevalence (0.2%)
         df_scored_prob = df_features.withColumn(

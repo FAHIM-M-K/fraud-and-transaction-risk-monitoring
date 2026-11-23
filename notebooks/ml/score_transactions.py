@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %pip install -q lightgbm
+# MAGIC %pip install -q lightgbm xgboost scikit-learn
 
 # COMMAND ----------
 from payment_risk.common.config import resolve_lakehouse_config
