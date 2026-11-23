@@ -1,5 +1,3 @@
-"""Unit tests for hybrid risk scoring engine and operational action routing."""
-
 import pytest
 from payment_risk.common.risk_scorer import (
     calculate_composite_risk_score,
@@ -29,7 +27,7 @@ def test_low_risk_transaction():
 def test_impossible_travel_triggers_elevated_or_critical():
     score, penalties, tier, action = calculate_composite_risk_score(
         ml_probability=0.10,
-        is_impossible_travel=1,  # +50 rule penalty
+        is_impossible_travel=1,
         distinct_cards_per_device_10m=1,
         amount_zscore=0.5,
         merchant_risk_tier="LOW",
@@ -43,11 +41,11 @@ def test_impossible_travel_triggers_elevated_or_critical():
 def test_critical_multi_rule_burst():
     score, penalties, tier, action = calculate_composite_risk_score(
         ml_probability=0.75,
-        is_impossible_travel=1,  # +50
-        distinct_cards_per_device_10m=6,  # +40
-        amount_zscore=4.2,  # +30
-        merchant_risk_tier="HIGH",  # +20
+        is_impossible_travel=1,
+        distinct_cards_per_device_10m=6,
+        amount_zscore=4.2,
+        merchant_risk_tier="HIGH",
     )
-    assert score == 100  # Capped at 100
+    assert score == 100
     assert tier == TIER_CRITICAL
     assert action == ACTION_BLOCK

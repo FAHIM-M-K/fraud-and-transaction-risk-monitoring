@@ -1,9 +1,3 @@
-"""Hybrid composite risk scoring engine.
-
-Combines ML probabilities with deterministic rule penalties to classify risk tiers
-and dictate real-time operational routing actions (APPROVE, CHALLENGE_3DS, BLOCK).
-"""
-
 from typing import Tuple
 
 ACTION_APPROVE: str = "APPROVE"
@@ -22,27 +16,6 @@ def calculate_composite_risk_score(
     amount_zscore: float = 0.0,
     merchant_risk_tier: str = "LOW",
 ) -> Tuple[int, int, str, str]:
-    """Computes composite hybrid risk score (0-100), rule penalty points,
-
-    risk tier (LOW/ELEVATED/CRITICAL), and operational action (APPROVE/CHALLENGE_3DS/BLOCK).
-
-    Formula:
-        Composite Score = min(100, int(ml_probability * 60 + rule_penalties))
-
-    Rule Penalties:
-        +50 pts: is_impossible_travel == 1 (implied velocity > 800 km/h)
-        +40 pts: distinct_cards_per_device_10m >= 5 (card testing cluster)
-        +30 pts: amount_zscore > 3.5 (extreme spend deviation)
-        +20 pts: merchant_risk_tier == 'HIGH'
-
-    Routing Decision Matrix:
-        Score >= 75: CRITICAL -> BLOCK
-        Score >= 40: ELEVATED -> CHALLENGE_3DS
-        Score <  40: LOW      -> APPROVE
-
-    Returns:
-        Tuple of (composite_score, rule_penalties, risk_tier, operational_action)
-    """
     rule_penalties = 0
 
     if is_impossible_travel == 1:

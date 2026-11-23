@@ -1,5 +1,3 @@
-"""Unit tests for PostgreSQL JDBC connection parsing and normalization."""
-
 import pytest
 from payment_risk.bronze.ingestion import parse_postgres_jdbc_connection
 

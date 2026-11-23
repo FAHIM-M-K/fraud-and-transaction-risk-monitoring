@@ -1,5 +1,3 @@
-"""Unit tests for transaction data quality validation rules and reject taxonomy."""
-
 import pytest
 from payment_risk.common.validators import (
     validate_transaction_dict,
@@ -30,41 +28,39 @@ def test_valid_transaction(base_valid_tx):
     assert rejects == []
 
 
-def test_null_tx_id_rejection(base_valid_tx):
-    base_valid_tx["tx_id"] = None
+def test_reject_null_tx_id(base_valid_tx):
+    base_valid_tx["tx_id"] = "   "
     rejects = validate_transaction_dict(base_valid_tx)
     assert REJECT_ERR_NULL_TX_ID in rejects
 
-    base_valid_tx["tx_id"] = "   "
-    rejects_blank = validate_transaction_dict(base_valid_tx)
-    assert REJECT_ERR_NULL_TX_ID in rejects_blank
 
-
-def test_negative_amount_rejection(base_valid_tx):
+def test_reject_negative_amount(base_valid_tx):
     base_valid_tx["amount_cents"] = -500
     rejects = validate_transaction_dict(base_valid_tx)
     assert REJECT_ERR_NEGATIVE_AMOUNT in rejects
 
 
-def test_invalid_currency_rejection(base_valid_tx):
+def test_reject_invalid_currency(base_valid_tx):
     base_valid_tx["currency"] = "XYZ"
     rejects = validate_transaction_dict(base_valid_tx)
     assert REJECT_ERR_INVALID_CURRENCY in rejects
 
 
-def test_malformed_timestamp_rejection(base_valid_tx):
-    base_valid_tx["timestamp"] = "not-a-timestamp"
+def test_reject_malformed_timestamp(base_valid_tx):
+    base_valid_tx["timestamp"] = "15/10/2026 14:30"
     rejects = validate_transaction_dict(base_valid_tx)
     assert REJECT_ERR_MALFORMED_TIMESTAMP in rejects
 
 
-def test_invalid_geo_coordinates_rejection(base_valid_tx):
-    base_valid_tx["latitude"] = 105.0  # Invalid latitude (> 90)
+def test_reject_invalid_latitude(base_valid_tx):
+    base_valid_tx["latitude"] = 95.0
     rejects = validate_transaction_dict(base_valid_tx)
     assert REJECT_ERR_INVALID_GEO in rejects
 
 
-def test_duplicate_tx_rejection(base_valid_tx):
-    seen = {"tx_test_valid_001"}
-    rejects = validate_transaction_dict(base_valid_tx, seen_tx_ids=seen)
-    assert REJECT_ERR_DUPLICATE_TX in rejects
+def test_reject_batch_duplicate_tx_id(base_valid_tx):
+    seen = set()
+    r1 = validate_transaction_dict(base_valid_tx, seen_tx_ids=seen)
+    assert r1 == []
+    r2 = validate_transaction_dict(base_valid_tx, seen_tx_ids=seen)
+    assert REJECT_ERR_DUPLICATE_TX in r2

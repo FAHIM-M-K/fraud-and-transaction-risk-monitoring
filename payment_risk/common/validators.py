@@ -1,8 +1,3 @@
-"""Domain data quality rules and reject code definitions for transactions.
-
-Defines standardized error taxonomy and pure-Python validation functions for fast unit testing.
-"""
-
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
@@ -21,23 +16,9 @@ def validate_transaction_dict(
     seen_tx_ids: Optional[Set[str]] = None,
     allowed_currencies: Optional[Set[str]] = None,
 ) -> List[str]:
-    """Pure-Python validation for a single transaction record.
-
-    Evaluates required fields, non-negative amounts, ISO-4217 currencies,
-    ISO-8601 timestamps, WGS-84 coordinate bounds, and batch uniqueness.
-
-    Args:
-        tx: Transaction dictionary to validate.
-        seen_tx_ids: Optional set tracking seen tx_ids in the current batch.
-        allowed_currencies: Optional override for valid currency codes.
-
-    Returns:
-        List of reject reason codes (empty list indicates a valid transaction).
-    """
     currencies = allowed_currencies or VALID_CURRENCIES
     rejects: List[str] = []
 
-    # 1. Null / Empty Transaction ID & Duplicate check
     tx_id = tx.get("tx_id")
     if not tx_id or not str(tx_id).strip():
         rejects.append(REJECT_ERR_NULL_TX_ID)
@@ -47,7 +28,6 @@ def validate_transaction_dict(
         else:
             seen_tx_ids.add(tx_id)
 
-    # 2. Monetary Amount Sanity
     amount = tx.get("amount_cents")
     try:
         if amount is None or int(amount) < 0:
@@ -55,12 +35,10 @@ def validate_transaction_dict(
     except (ValueError, TypeError):
         rejects.append(REJECT_ERR_NEGATIVE_AMOUNT)
 
-    # 3. ISO Currency Whitelist
     currency = tx.get("currency")
     if not currency or str(currency).upper() not in currencies:
         rejects.append(REJECT_ERR_INVALID_CURRENCY)
 
-    # 4. ISO-8601 Timestamp Conformance
     raw_ts = tx.get("timestamp")
     if not raw_ts:
         rejects.append(REJECT_ERR_MALFORMED_TIMESTAMP)
@@ -71,7 +49,6 @@ def validate_transaction_dict(
         except Exception:
             rejects.append(REJECT_ERR_MALFORMED_TIMESTAMP)
 
-    # 5. Geolocation Coordinate Bounds
     lat = tx.get("latitude")
     lon = tx.get("longitude")
     try:

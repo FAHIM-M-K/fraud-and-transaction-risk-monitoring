@@ -1,10 +1,4 @@
 # Databricks notebook source
-# COMMAND ----------
-# MAGIC %md
-# MAGIC # Verify Bronze Manifest
-# MAGIC Thin orchestrator reconciling Bronze table partition row counts and SHA-256 against Landing Zone manifest.
-
-# COMMAND ----------
 from payment_risk.common.config import resolve_lakehouse_config
 from payment_risk.bronze.verification import verify_bronze_manifest_audit
 

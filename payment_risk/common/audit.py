@@ -1,9 +1,3 @@
-"""Auditing, reconciliation, and mathematical conservation assertions.
-
-Provides cryptographic SHA-256 verification, Medallion row algebra reconciliation,
-monetary volume balance checks, and classification metric evaluations.
-"""
-
 import hashlib
 import json
 from typing import Any, Dict, List, Tuple
@@ -14,11 +8,6 @@ def verify_row_algebra(
     silver_count: int,
     quarantine_count: int,
 ) -> Tuple[bool, str]:
-    """Asserts that Bronze row count exactly equals Silver valid count + Quarantine reject count.
-
-    Reconciliation Identity:
-        Count(Bronze) = Count(Silver) + Count(Quarantine)
-    """
     total_accounted = silver_count + quarantine_count
     discrepancy = bronze_count - total_accounted
     if discrepancy == 0:
@@ -31,11 +20,6 @@ def verify_monetary_reconciliation(
     silver_total_cents: int,
     quarantine_total_cents: int,
 ) -> Tuple[bool, str]:
-    """Asserts that total monetary value in cents is preserved across Bronze and (Silver + Quarantine).
-
-    Monetary Conservation Identity:
-        Sum(Bronze cents) = Sum(Silver cents) + Sum(Quarantine cents)
-    """
     expected_cents = silver_total_cents + quarantine_total_cents
     discrepancy = bronze_total_cents - expected_cents
     if discrepancy == 0:
@@ -47,10 +31,6 @@ def verify_manifest_checksum(
     records: List[Dict[str, Any]],
     expected_sha256: str,
 ) -> Tuple[bool, str, str]:
-    """Verifies cryptographic SHA-256 hash match against Landing Zone manifest expectation.
-
-    Matches the generator's canonical serialization: json.dumps(records, sort_keys=True, default=str).
-    """
     serialized = json.dumps(records, sort_keys=True, default=str)
     computed_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
@@ -59,20 +39,23 @@ def verify_manifest_checksum(
     return match, computed_hash, msg
 
 
-def compute_precision_recall_f1(tp: int, fp: int, fn: int) -> Dict[str, float]:
-    """Computes standard precision, recall, and F1 score with zero division protection."""
+def compute_binary_metrics(
+    y_true: List[int],
+    y_pred: List[int],
+) -> Dict[str, float]:
+    tp = sum(1 for yt, yp in zip(y_true, y_pred) if yt == 1 and yp == 1)
+    fp = sum(1 for yt, yp in zip(y_true, y_pred) if yt == 0 and yp == 1)
+    fn = sum(1 for yt, yp in zip(y_true, y_pred) if yt == 1 and yp == 0)
+    tn = sum(1 for yt, yp in zip(y_true, y_pred) if yt == 0 and yp == 0)
+
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = (
-        2.0 * precision * recall / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    f1 = 2.0 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / len(y_true) if len(y_true) > 0 else 0.0
+
     return {
-        "true_positives": float(tp),
-        "false_positives": float(fp),
-        "false_negatives": float(fn),
-        "precision": round(precision, 4),
-        "recall": round(recall, 4),
-        "f1_score": round(f1, 4),
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "accuracy": accuracy,
     }

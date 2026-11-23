@@ -1,22 +1,8 @@
-"""Bronze Layer Table Schemas, Volumes, and Infrastructure DDL.
-
-Idempotently provisions the catalog, Bronze schema, Unity Catalog storage volumes,
-and raw Delta Lake tables with schema evolution and dead-letter rescue capabilities.
-"""
-
 from typing import Any
 from payment_risk.common.config import LakehouseConfig
 
 
 def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
-    """Idempotently initializes the catalog, bronze schema, storage volumes,
-
-    and Bronze raw Delta tables.
-
-    Args:
-        spark: Active SparkSession.
-        config: LakehouseConfig instance with resolved catalog and schema names.
-    """
     catalog = config.catalog_name
     bronze = config.bronze_schema
 
@@ -25,7 +11,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     spark.sql(f"CREATE VOLUME IF NOT EXISTS {bronze}.landing_zone COMMENT 'Storage for daily settlement batch drops';")
     spark.sql(f"CREATE VOLUME IF NOT EXISTS {bronze}.checkpoints COMMENT 'RocksDB checkpoint state for Auto Loader';")
 
-    # High-watermark tracking for incremental RDBMS extracts
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}._metadata_watermarks (
       source_name    STRING NOT NULL,
@@ -34,7 +19,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     ) USING DELTA;
     """)
 
-    # Raw transaction event stream
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}.raw_transactions (
       tx_id                  STRING,
@@ -74,7 +58,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     );
     """)
 
-    # Raw dispute/chargeback stream
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}.raw_chargebacks (
       chargeback_id          STRING,
@@ -95,7 +78,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     PARTITIONED BY (batch_date);
     """)
 
-    # Raw merchants from Neon PostgreSQL
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}.raw_merchants (
       merchant_id         STRING,
@@ -114,7 +96,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     ) USING DELTA;
     """)
 
-    # Raw customers from Neon PostgreSQL
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}.raw_customers (
       customer_id         STRING,
@@ -132,7 +113,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     ) USING DELTA;
     """)
 
-    # Manifest verification audit log
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}.manifest_audit (
       batch_date          DATE,
@@ -148,7 +128,6 @@ def create_bronze_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     ) USING DELTA;
     """)
 
-    # Operational observability run log
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {bronze}.pipeline_run_log (
       run_id           STRING,

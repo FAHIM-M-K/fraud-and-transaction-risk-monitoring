@@ -1,9 +1,3 @@
-"""Bronze Streaming and Incremental Ingestion Logic.
-
-Orchestrates Databricks Auto Loader (cloudFiles) streaming for landing zone JSONL files
-and watermark-based incremental JDBC extraction for dimension tables from Neon PostgreSQL.
-"""
-
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
 from pyspark.sql import functions as F
@@ -12,11 +6,7 @@ from payment_risk.common.watermark import get_watermark, update_watermark
 
 
 def parse_postgres_jdbc_connection(raw_url: str) -> Tuple[str, Dict[str, str]]:
-    """Normalizes connection strings (PostgreSQL URI or JDBC URL) for PySpark JDBC.
-
-    Extracts inline credentials, hostname, port, database, and SSL options
-    so the JDBC driver connects reliably without authority credential errors.
-    """
+    """Normalizes PostgreSQL connection URI into standard JDBC URL and driver properties."""
     url = raw_url.strip()
     if url.startswith("jdbc:"):
         url = url[5:]
@@ -43,17 +33,6 @@ def parse_postgres_jdbc_connection(raw_url: str) -> Tuple[str, Dict[str, str]]:
 
 
 def ingest_raw_transactions_stream(spark: Any, config: LakehouseConfig) -> Any:
-    """Configures and starts Auto Loader streaming ingestion for raw transactions,
-
-    capturing malformed schemas in _rescued_data and executing with trigger(availableNow=True).
-
-    Args:
-        spark: Active SparkSession.
-        config: LakehouseConfig instance.
-
-    Returns:
-        Active StreamingQuery handle.
-    """
     landing_path = f"{config.landing_volume_path}/transactions"
     checkpoint_path = f"{config.checkpoints_volume_path}/transactions"
     schema_path = f"{config.checkpoints_volume_path}/transactions_schema"
@@ -94,15 +73,6 @@ def ingest_raw_transactions_stream(spark: Any, config: LakehouseConfig) -> Any:
 
 
 def ingest_raw_chargebacks_stream(spark: Any, config: LakehouseConfig) -> Any:
-    """Configures and starts Auto Loader streaming ingestion for dispute chargebacks.
-
-    Args:
-        spark: Active SparkSession.
-        config: LakehouseConfig instance.
-
-    Returns:
-        Active StreamingQuery handle.
-    """
     landing_path = f"{config.landing_volume_path}/chargebacks"
     checkpoint_path = f"{config.checkpoints_volume_path}/chargebacks"
     schema_path = f"{config.checkpoints_volume_path}/chargebacks_schema"
@@ -148,17 +118,6 @@ def ingest_incremental_dimensions(
     jdbc_url: str,
     jdbc_properties: Optional[Dict[str, str]] = None,
 ) -> Dict[str, int]:
-    """Incrementally ingests dimension tables from Neon PostgreSQL using watermark pushdown.
-
-    Args:
-        spark: Active SparkSession.
-        config: LakehouseConfig instance.
-        jdbc_url: PostgreSQL JDBC connection URL.
-        jdbc_properties: Optional JDBC driver connection properties.
-
-    Returns:
-        Dictionary mapping source name to record count ingested.
-    """
     watermark_table = f"{config.bronze_schema}._metadata_watermarks"
     clean_url, auto_props = parse_postgres_jdbc_connection(jdbc_url)
     props = dict(auto_props)
