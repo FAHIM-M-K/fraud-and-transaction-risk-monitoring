@@ -96,3 +96,30 @@ def create_gold_infrastructure(spark: Any, config: LakehouseConfig) -> None:
       'delta.autoOptimize.autoCompact'   = 'true'
     );
     """)
+
+    spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {gold}.scored_transactions (
+      tx_id                      STRING NOT NULL,
+      customer_id                STRING NOT NULL,
+      merchant_id                STRING NOT NULL,
+      amount_cents               BIGINT NOT NULL,
+      currency                   STRING NOT NULL,
+      timestamp                  TIMESTAMP NOT NULL,
+      batch_date                 DATE NOT NULL,
+      ml_fraud_probability       DOUBLE NOT NULL,
+      composite_risk_score       INT NOT NULL,
+      rule_penalty_score         INT NOT NULL,
+      risk_tier                  STRING NOT NULL,
+      recommended_action         STRING NOT NULL,
+      top_risk_drivers           STRING,
+      model_version              STRING NOT NULL,
+      scored_at                  TIMESTAMP NOT NULL
+    )
+    USING DELTA
+    CLUSTER BY (batch_date, risk_tier, recommended_action)
+    TBLPROPERTIES (
+      'delta.enableChangeDataFeed'       = 'true',
+      'delta.autoOptimize.optimizeWrite' = 'true',
+      'delta.autoOptimize.autoCompact'   = 'true'
+    );
+    """)

@@ -25,6 +25,11 @@ class LakehouseConfig:
         return f"{self.catalog_name}.{prefix}gold"
 
     @property
+    def ml_schema(self) -> str:
+        prefix = f"{self.env_prefix}_" if self.env_prefix else ""
+        return f"{self.catalog_name}.{prefix}ml"
+
+    @property
     def landing_volume_path(self) -> str:
         prefix = f"{self.env_prefix}_" if self.env_prefix else ""
         return f"/Volumes/{self.catalog_name}/{prefix}bronze/landing_zone"
