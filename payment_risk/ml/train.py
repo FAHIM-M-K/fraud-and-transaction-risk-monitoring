@@ -42,7 +42,6 @@ def train_fraud_detection_model(
 
     target_model_name = model_name or f"{config.catalog_name}.ml.fraud_detector"
 
-    # 1. Prepare Enriched Training Data from Lakehouse Silver Layer
     df_features = prepare_feature_dataframe(spark, config, maturation_days=maturation_days)
     df_train_spark, df_test_spark, split_date = split_oot_dataset(df_features)
 
@@ -60,7 +59,6 @@ def train_fraud_detection_model(
         train_pdf[col] = train_pdf[col].astype("category")
         test_pdf[col] = test_pdf[col].astype("category")
 
-    # 2. Stage 1: Fit Unsupervised Isolation Forest Anomaly Feature Extractor
     iso_model = IsolationForest(
         n_estimators=100,
         contamination=0.03,
@@ -69,7 +67,6 @@ def train_fraud_detection_model(
     )
     iso_model.fit(train_pdf[num_base])
 
-    # Extract continuous anomaly score: higher score = more anomalous
     train_pdf["iso_anomaly_score"] = -iso_model.score_samples(train_pdf[num_base])
     test_pdf["iso_anomaly_score"] = -iso_model.score_samples(test_pdf[num_base])
 
@@ -99,9 +96,6 @@ def train_fraud_detection_model(
         mlflow.log_param("temporal_split_date", split_date)
         mlflow.log_param("maturation_days", maturation_days)
 
-        # -------------------------------------------------------------
-        # Candidate 1: LightGBM GBDT
-        # -------------------------------------------------------------
         lgb_params = {
             "objective": "binary",
             "metric": "auc",
@@ -127,9 +121,6 @@ def train_fraud_detection_model(
         lgb_prob = lgb_model.predict_proba(X_test)[:, 1].tolist()
         lgb_metrics = evaluate_model_performance(y_test.tolist(), lgb_prob, amounts_test)
 
-        # -------------------------------------------------------------
-        # Candidate 2: XGBoost
-        # -------------------------------------------------------------
         xgb_params = {
             "objective": "binary:logistic",
             "eval_metric": "aucpr",
@@ -153,12 +144,6 @@ def train_fraud_detection_model(
         xgb_prob = xgb_model.predict_proba(X_test)[:, 1].tolist()
         xgb_metrics = evaluate_model_performance(y_test.tolist(), xgb_prob, amounts_test)
 
-        # -------------------------------------------------------------
-        # Bake-off Champion Selection:
-        # Primary: Dollar-Weighted Recall @ 90% Precision
-        # Secondary: PR-AUC
-        # Calibration Penalty: Brier Score
-        # -------------------------------------------------------------
         lgb_score = (
             lgb_metrics["dollar_weighted_recall_at_90"] * 0.6
             + lgb_metrics["pr_auc"] * 0.4
@@ -185,7 +170,6 @@ def train_fraud_detection_model(
             model_kwarg = {"lgb_model": champion_model}
             feature_importances = dict(zip(full_feature_cols, champion_model.feature_importances_.tolist()))
 
-        # Log candidate metrics to MLflow
         mlflow.log_metrics({
             "champion_is_xgboost": 1 if champion_name == "XGBoost" else 0,
             "lgb_pr_auc": lgb_metrics["pr_auc"],
@@ -211,7 +195,6 @@ def train_fraud_detection_model(
         }
         mlflow.log_dict(bakeoff_summary, "bakeoff_summary.json")
 
-        # Register winning model in Unity Catalog / MLflow Registry
         try:
             model_info = champion_log_func(
                 artifact_path="model",

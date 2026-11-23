@@ -127,10 +127,6 @@ def score_batch_transactions(
                 )
             ),
         )
-                    )
-                )
-            ),
-        )
         .withColumn("model_version", F.lit(model_version))
         .withColumn("scored_at", F.current_timestamp())
         .select(
