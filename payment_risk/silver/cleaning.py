@@ -28,7 +28,7 @@ def clean_and_quarantine_transactions(
     if target_batch_date:
         df_raw = df_raw.filter(F.col("batch_date") == target_batch_date)
 
-    df_parsed = df_raw.withColumn("parsed_timestamp", F.to_timestamp(F.col("timestamp")))
+    df_parsed = df_raw.withColumn("parsed_timestamp", F.expr("try_cast(timestamp AS timestamp)"))
 
     tx_window = Window.partitionBy("tx_id").orderBy(F.col("parsed_timestamp").asc_nulls_last())
     df_flagged = df_parsed.withColumn("tx_row_num", F.row_number().over(tx_window))
@@ -84,7 +84,7 @@ def clean_and_quarantine_transactions(
                 F.when(rule_duplicate, "Duplicate tx_id detected in batch window"),
             ).alias("rejection_details"),
             F.current_timestamp().alias("quarantined_at"),
-            F.col("batch_date"),
+            F.expr("try_cast(batch_date AS date)").alias("batch_date"),
         )
         quarantine_df.write.format("delta").mode("append").saveAsTable(quarantine_table)
 
@@ -115,6 +115,7 @@ def clean_and_quarantine_transactions(
             .withColumn("is_fraud_label", F.col("cb_tx_id").isNotNull())
             .withColumn("timestamp", F.col("parsed_timestamp"))
             .withColumn("processed_at", F.current_timestamp())
+            .withColumn("batch_date", F.expr("try_cast(batch_date AS date)"))
             .select(*clean_cols)
         )
 
@@ -150,7 +151,9 @@ def clean_and_sync_chargebacks(
     df_clean = (
         df_raw.withColumn("row_num", F.row_number().over(cb_window))
         .filter(F.col("row_num") == 1)
-        .withColumn("filed_date", F.to_date(F.col("filed_date")))
+        .withColumn("filed_date", F.expr("try_cast(filed_date AS date)"))
+        .withColumn("batch_date", F.expr("try_cast(batch_date AS date)"))
+        .withColumn("disputed_amount_cents", F.expr("try_cast(disputed_amount_cents AS bigint)"))
         .withColumn("processed_at", F.current_timestamp())
         .select(
             "chargeback_id",
@@ -195,7 +198,7 @@ def sync_silver_dimensions(
         spark.table(bronze_merchants)
         .withColumn("rn", F.row_number().over(m_window))
         .filter(F.col("rn") == 1)
-        .withColumn("onboarded_date", F.to_date(F.col("onboarded_date")))
+        .withColumn("onboarded_date", F.expr("try_cast(onboarded_date AS date)"))
         .withColumn("synced_at", F.current_timestamp())
         .select(
             "merchant_id",
