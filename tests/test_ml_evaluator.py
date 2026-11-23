@@ -12,6 +12,9 @@ from payment_risk.ml.evaluator import (
     calculate_confusion_matrix,
     calculate_pr_auc,
     calculate_recall_at_precision,
+    calculate_dollar_weighted_recall,
+    calculate_dollar_weighted_recall_at_precision,
+    calculate_brier_score,
     evaluate_model_performance,
 )
 
@@ -91,4 +94,30 @@ def test_evaluate_model_performance_summary():
     perf = evaluate_model_performance(y_true, y_prob, amounts)
     assert "pr_auc" in perf
     assert "optimal_threshold" in perf
+    assert "threshold_low_challenge" in perf
+    assert "threshold_high_block" in perf
+    assert "dollar_weighted_recall_at_90" in perf
+    assert "brier_calibration_score" in perf
     assert perf["dollars_saved_cents"] > 0
+
+
+def test_dollar_weighted_recall():
+    y_true = [1, 1, 0, 0]
+    y_prob = [0.95, 0.40, 0.10, 0.05]
+    amounts = [100000, 10000, 5000, 5000]  # $1,000 fraud vs $100 fraud
+
+    # At threshold 0.50: caught the $1,000 fraud (0.95) but missed the $100 fraud (0.40)
+    # Standard recall is 1 / 2 = 0.50
+    # Dollar recall is $1,000 / ($1,000 + $100) = 100,000 / 110,000 = ~0.9091
+    dollar_rec = calculate_dollar_weighted_recall(y_true, y_prob, amounts, threshold=0.50)
+    assert dollar_rec == pytest.approx(0.9091, abs=1e-3)
+
+
+def test_brier_calibration_score():
+    # Perfect probabilities: 1 for fraud, 0 for legit -> Brier score = 0.0
+    perfect_brier = calculate_brier_score([1, 0], [1.0, 0.0])
+    assert perfect_brier == 0.0
+
+    # Inverted probabilities -> Brier score = 1.0
+    bad_brier = calculate_brier_score([1, 0], [0.0, 1.0])
+    assert bad_brier == 1.0

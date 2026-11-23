@@ -31,6 +31,8 @@ def score_batch_transactions(
     config: LakehouseConfig,
     target_batch_date: Optional[str] = None,
     model_name_or_uri: Optional[str] = None,
+    threshold_challenge: float = 0.35,
+    threshold_block: float = 0.70,
 ) -> Dict[str, Any]:
     gold_scored_table = f"{config.gold_schema}.scored_transactions"
     model_name = model_name_or_uri or f"{config.catalog_name}.ml.fraud_detector"
@@ -91,6 +93,8 @@ def score_batch_transactions(
             distinct_cards_per_device_10m=1,
             amount_zscore=zscore,
             merchant_risk_tier=tier,
+            threshold_challenge=threshold_challenge,
+            threshold_block=threshold_block,
         )
         return (comp_score, penalties, r_tier, action)
 
@@ -118,6 +122,11 @@ def score_batch_transactions(
                         F.when(F.col("velocity_accel_1h_24h") > 3.0, F.lit("VELOCITY_SURGE")),
                         F.when(F.col("merchant_risk_tier") == "HIGH", F.lit("HIGH_RISK_MERCHANT")),
                         F.when(F.col("cvv_code") != "M", F.lit("CVV_MISMATCH")),
+                        F.when(F.col("ml_fraud_probability") >= threshold_block, F.lit("CRITICAL_ML_FRAUD_PROB")),
+                    )
+                )
+            ),
+        )
                     )
                 )
             ),

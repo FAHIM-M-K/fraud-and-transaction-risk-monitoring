@@ -1,4 +1,7 @@
 # Databricks notebook source
+# MAGIC %pip install -q lightgbm
+
+# COMMAND ----------
 from payment_risk.common.config import resolve_lakehouse_config
 from payment_risk.ml.scoring import score_batch_transactions
 

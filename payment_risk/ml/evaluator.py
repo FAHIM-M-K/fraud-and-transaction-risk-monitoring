@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Tuple
-from payment_risk.common.risk_scorer import calculate_optimal_operational_threshold
+from payment_risk.common.risk_scorer import (
+    calculate_optimal_operational_threshold,
+    calculate_3way_cost_utility_thresholds,
+)
 
 
 def calculate_confusion_matrix(y_true: List[int], y_pred: List[int]) -> Dict[str, int]:
@@ -38,7 +41,6 @@ def calculate_pr_auc(y_true: List[int], y_prob: List[float], steps: int = 100) -
     thresholds = [i / float(steps) for i in range(steps + 1)]
     pr_points = calculate_precision_recall_curve(y_true, y_prob, thresholds)
 
-    # Sort by recall ascending
     pr_points.sort(key=lambda x: x[1])
 
     area = 0.0
@@ -70,6 +72,50 @@ def calculate_recall_at_precision(
     return 0.0
 
 
+def calculate_dollar_weighted_recall(
+    y_true: List[int],
+    y_prob: List[float],
+    amounts_cents: List[int],
+    threshold: float,
+) -> float:
+    total_fraud_dollars = sum(amt for yt, amt in zip(y_true, amounts_cents) if yt == 1)
+    if total_fraud_dollars == 0:
+        return 0.0
+
+    caught_fraud_dollars = sum(
+        amt for yt, yp, amt in zip(y_true, y_prob, amounts_cents) if yt == 1 and yp >= threshold
+    )
+    return round(caught_fraud_dollars / float(total_fraud_dollars), 4)
+
+
+def calculate_dollar_weighted_recall_at_precision(
+    y_true: List[int],
+    y_prob: List[float],
+    amounts_cents: List[int],
+    min_precision: float = 0.90,
+    steps: int = 100,
+) -> float:
+    thresholds = [i / float(steps) for i in range(steps + 1)]
+    pr_points = calculate_precision_recall_curve(y_true, y_prob, thresholds)
+
+    qualifying_thresholds = [t for prec, _, t in pr_points if prec >= min_precision]
+    if not qualifying_thresholds:
+        return 0.0
+
+    dollar_recalls = [
+        calculate_dollar_weighted_recall(y_true, y_prob, amounts_cents, t)
+        for t in qualifying_thresholds
+    ]
+    return max(dollar_recalls) if dollar_recalls else 0.0
+
+
+def calculate_brier_score(y_true: List[int], y_prob: List[float]) -> float:
+    if not y_true:
+        return 0.0
+    mse = sum((yp - yt) ** 2 for yt, yp in zip(y_true, y_prob)) / len(y_true)
+    return round(mse, 4)
+
+
 def evaluate_model_performance(
     y_true: List[int],
     y_prob: List[float],
@@ -77,6 +123,10 @@ def evaluate_model_performance(
 ) -> Dict[str, Any]:
     pr_auc = calculate_pr_auc(y_true, y_prob)
     rec_at_90 = calculate_recall_at_precision(y_true, y_prob, min_precision=0.90)
+    dollar_rec_at_90 = calculate_dollar_weighted_recall_at_precision(
+        y_true, y_prob, amounts_cents, min_precision=0.90
+    )
+    brier_score = calculate_brier_score(y_true, y_prob)
 
     best_thresh, min_loss, cost_metrics = calculate_optimal_operational_threshold(
         y_true=y_true,
@@ -84,10 +134,19 @@ def evaluate_model_performance(
         amounts_cents=amounts_cents,
     )
 
+    dollar_rec_optimal = calculate_dollar_weighted_recall(
+        y_true, y_prob, amounts_cents, threshold=best_thresh
+    )
+
     return {
         "pr_auc": pr_auc,
         "recall_at_90_precision": rec_at_90,
+        "dollar_weighted_recall_at_90": dollar_rec_at_90,
+        "dollar_weighted_recall_at_optimal": dollar_rec_optimal,
+        "brier_calibration_score": brier_score,
         "optimal_threshold": best_thresh,
+        "threshold_low_challenge": cost_metrics.get("threshold_low_challenge", 0.35),
+        "threshold_high_block": cost_metrics.get("threshold_high_block", 0.70),
         "min_expected_loss_cents": min_loss,
         "dollars_saved_cents": cost_metrics.get("dollars_saved_cents", 0),
         "f1_at_optimal": cost_metrics.get("f1", 0.0),
@@ -97,4 +156,5 @@ def evaluate_model_performance(
         "fp": cost_metrics.get("fp", 0),
         "fn": cost_metrics.get("fn", 0),
         "tn": cost_metrics.get("tn", 0),
+        "three_way_cost_metrics": cost_metrics.get("three_way_cost_metrics", {}),
     }

@@ -19,6 +19,7 @@ NUMERICAL_FEATURES: List[str] = [
     "speed_kmh",
     "velocity_accel_1h_24h",
     "amount_ratio_30d",
+    "iso_anomaly_score",
 ]
 
 CATEGORICAL_FEATURES: List[str] = [
@@ -39,6 +40,7 @@ def prepare_feature_dataframe(
     spark: Any,
     config: LakehouseConfig,
     target_batch_date: Optional[str] = None,
+    maturation_days: int = 0,
 ) -> DataFrame:
     clean_tx_table = f"{config.silver_schema}.clean_transactions"
     features_table = f"{config.silver_schema}.customer_risk_features"
@@ -47,6 +49,18 @@ def prepare_feature_dataframe(
     df_tx = spark.table(clean_tx_table)
     if target_batch_date:
         df_tx = df_tx.filter(F.col("batch_date") == target_batch_date)
+
+    # Label Maturation Lag Filtering:
+    # Chargeback disputes take 30-120 days to mature. Recent transactions without a dispute
+    # cannot be treated as confirmed negatives. If maturation_days > 0, exclude immature non-fraud cases.
+    if maturation_days > 0:
+        max_date_row = df_tx.select(F.max("batch_date")).collect()
+        if max_date_row and max_date_row[0][0]:
+            max_batch_date = max_date_row[0][0]
+            cutoff_date = F.date_sub(F.lit(max_batch_date), maturation_days)
+            df_tx = df_tx.filter(
+                (F.col("is_fraud_label") == True) | (F.col("batch_date") <= cutoff_date)
+            )
 
     df_feat = spark.table(features_table).select(
         "tx_id",
@@ -102,6 +116,7 @@ def prepare_feature_dataframe(
         .withColumn("cvv_code", F.coalesce(F.col("cvv_code"), F.lit("U")))
         .withColumn("currency", F.coalesce(F.col("currency"), F.lit("USD")))
         .withColumn("merchant_category_code", F.coalesce(F.col("merchant_category_code"), F.lit("0000")))
+        .withColumn("iso_anomaly_score", F.lit(0.0).cast("double"))
     )
 
     return df_enriched
