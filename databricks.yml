@@ -1,0 +1,25 @@
+bundle:
+  name: payment_risk
+
+variables:
+  catalog_name:
+    description: "Target Unity Catalog name"
+    default: payment_risk
+  env_prefix:
+    description: "Optional environment prefix"
+    default: ""
+  secret_scope:
+    description: "Databricks secret scope"
+    default: grid_platform
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-3d6ea2d4-8d3f.cloud.databricks.com
+      root_path: /Users/fahimmeethale@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog_name: payment_risk
+      env_prefix: ""
+      secret_scope: grid_platform

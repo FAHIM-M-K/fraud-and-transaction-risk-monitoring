@@ -1,0 +1,82 @@
+"""Auditing, reconciliation, and mathematical conservation assertions.
+
+Provides cryptographic SHA-256 verification, Medallion row algebra reconciliation,
+monetary volume balance checks, and classification metric evaluations.
+"""
+
+import hashlib
+import json
+from typing import Any, Dict, List, Tuple
+
+
+def verify_row_algebra(
+    bronze_count: int,
+    silver_count: int,
+    quarantine_count: int,
+) -> Tuple[bool, str]:
+    """Asserts that Bronze row count exactly equals Silver valid count + Quarantine reject count.
+
+    Reconciliation Identity:
+        Count(Bronze) = Count(Silver) + Count(Quarantine)
+    """
+    total_accounted = silver_count + quarantine_count
+    discrepancy = bronze_count - total_accounted
+    if discrepancy == 0:
+        return True, f"Reconciliation passed: {bronze_count:,} Bronze = {silver_count:,} Silver + {quarantine_count:,} Quarantine"
+    return False, f"Reconciliation failed: {bronze_count:,} Bronze != {silver_count:,} Silver + {quarantine_count:,} Quarantine (Discrepancy: {discrepancy:,})"
+
+
+def verify_monetary_reconciliation(
+    bronze_total_cents: int,
+    silver_total_cents: int,
+    quarantine_total_cents: int,
+) -> Tuple[bool, str]:
+    """Asserts that total monetary value in cents is preserved across Bronze and (Silver + Quarantine).
+
+    Monetary Conservation Identity:
+        Sum(Bronze cents) = Sum(Silver cents) + Sum(Quarantine cents)
+    """
+    expected_cents = silver_total_cents + quarantine_total_cents
+    discrepancy = bronze_total_cents - expected_cents
+    if discrepancy == 0:
+        return True, f"Monetary balance verified: Bronze {bronze_total_cents:,} cents matches Silver + Quarantine."
+    return False, f"Monetary imbalance detected: Bronze {bronze_total_cents:,} vs Expected {expected_cents:,} cents."
+
+
+def verify_manifest_checksum(
+    transactions: List[Dict[str, Any]],
+    expected_sha256: str,
+) -> Tuple[bool, str, str]:
+    """Verifies cryptographic SHA-256 hash match against Landing Zone manifest expectation.
+
+    Sorts records by transaction ID and computes deterministic digest over JSON payloads.
+    """
+    sorted_txs = sorted(transactions, key=lambda x: str(x.get("tx_id", "")))
+    hasher = hashlib.sha256()
+    for tx in sorted_txs:
+        line = json.dumps(tx, sort_keys=True, default=str)
+        hasher.update(line.encode("utf-8"))
+    computed_hash = hasher.hexdigest()
+
+    match = computed_hash.lower() == expected_sha256.lower()
+    msg = "SHA-256 match confirmed" if match else f"Checksum mismatch: computed {computed_hash} != expected {expected_sha256}"
+    return match, computed_hash, msg
+
+
+def compute_precision_recall_f1(tp: int, fp: int, fn: int) -> Dict[str, float]:
+    """Computes standard precision, recall, and F1 score with zero division protection."""
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = (
+        2.0 * precision * recall / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
+    return {
+        "true_positives": float(tp),
+        "false_positives": float(fp),
+        "false_negatives": float(fn),
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1_score": round(f1, 4),
+    }
