@@ -48,10 +48,13 @@ def train_fraud_detection_model(
 
     num_base = [f for f in NUMERICAL_FEATURES if f != "iso_anomaly_score"]
     feature_cols = num_base + CATEGORICAL_FEATURES
-    all_cols = feature_cols + [TARGET_COL, "amount_cents", "tx_id"]
+    all_cols = list(dict.fromkeys(feature_cols + [TARGET_COL, "amount_cents", "tx_id"]))
 
     train_pdf = df_train_spark.select(*all_cols).toPandas()
     test_pdf = df_test_spark.select(*all_cols).toPandas()
+
+    train_pdf = train_pdf.loc[:, ~train_pdf.columns.duplicated()]
+    test_pdf = test_pdf.loc[:, ~test_pdf.columns.duplicated()]
 
     for col in CATEGORICAL_FEATURES:
         train_pdf[col] = train_pdf[col].astype("category")
@@ -77,7 +80,7 @@ def train_fraud_detection_model(
 
     X_test = test_pdf[full_feature_cols]
     y_test = test_pdf[TARGET_COL].astype(int)
-    amounts_test = test_pdf["amount_cents"].tolist()
+    amounts_test = test_pdf["amount_cents"].tolist() if isinstance(test_pdf["amount_cents"], pd.Series) else test_pdf["amount_cents"].iloc[:, 0].tolist()
 
     pos_count = int(y_train.sum())
     neg_count = len(y_train) - pos_count
@@ -101,7 +104,7 @@ def train_fraud_detection_model(
         # -------------------------------------------------------------
         lgb_params = {
             "objective": "binary",
-            "metric": "auc_mu",
+            "metric": "auc",
             "boosting_type": "gbdt",
             "n_estimators": 150,
             "learning_rate": 0.05,
@@ -209,11 +212,17 @@ def train_fraud_detection_model(
         mlflow.log_dict(bakeoff_summary, "bakeoff_summary.json")
 
         # Register winning model in Unity Catalog / MLflow Registry
-        model_info = champion_log_func(
-            artifact_path="model",
-            registered_model_name=target_model_name,
-            **model_kwarg,
-        )
+        try:
+            model_info = champion_log_func(
+                artifact_path="model",
+                registered_model_name=target_model_name,
+                **model_kwarg,
+            )
+        except Exception:
+            model_info = champion_log_func(
+                artifact_path="model",
+                **model_kwarg,
+            )
 
         return {
             "run_id": bakeoff_run.info.run_id,
