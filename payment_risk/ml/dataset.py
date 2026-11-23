@@ -76,6 +76,7 @@ def prepare_feature_dataframe(
         "seconds_since_prev_tx",
         "distance_from_prev_tx_km",
         "speed_kmh",
+        "is_geo_velocity_anomaly",
     )
 
     df_m = spark.table(merchants_table).select(

@@ -43,6 +43,12 @@ def score_batch_transactions(
     if record_count == 0:
         return {"records_scored": 0, "actions_breakdown": {}}
 
+    if "is_geo_velocity_anomaly" not in df_features.columns:
+        df_features = df_features.withColumn(
+            "is_geo_velocity_anomaly",
+            F.when(F.col("speed_kmh") > 800.0, True).otherwise(False),
+        )
+
     # Try loading registered MLflow model, or fall back to baseline heuristic probability
     model_version = "v1.0.0-champion"
     try:
