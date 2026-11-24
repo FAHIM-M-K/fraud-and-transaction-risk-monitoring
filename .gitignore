@@ -9,3 +9,8 @@ build/
 
 docs/
 mock_provider_service/
+
+payments fraud analytics.pbix
+architecture_diagram.svg
+azure-data-factory-baseline-logical.vsdx
+orchestrate-mlops-azure-databricks.vsdx

@@ -27,18 +27,11 @@ def train_fraud_detection_model(
         from sklearn.ensemble import IsolationForest
         import mlflow.lightgbm
         import mlflow.xgboost
-    except ModuleNotFoundError:
-        import subprocess
-        import sys
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-q",
-            "lightgbm", "xgboost", "scikit-learn"
-        ])
-        import lightgbm as lgb
-        import xgboost as xgb
-        from sklearn.ensemble import IsolationForest
-        import mlflow.lightgbm
-        import mlflow.xgboost
+    except ModuleNotFoundError as e:
+        raise ImportError(
+            f"Missing required ML dependency: {e.name}. "
+            "Please ensure lightgbm, xgboost, and scikit-learn are installed in the environment."
+        ) from e
 
     target_model_name = model_name or f"{config.catalog_name}.ml.fraud_detector"
 

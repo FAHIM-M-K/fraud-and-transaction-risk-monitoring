@@ -192,8 +192,16 @@ def compute_merchant_risk_monitoring(
         )
     )
 
-    count = df_final.count()
-    flagged_count = 0
+    stats = (
+        df_final.agg(
+            F.count("*").alias("total_count"),
+            F.sum(F.when(F.col("is_excessive_dispute_flag") == True, 1).otherwise(0)).alias("flagged_count"),
+        )
+        .collect()[0]
+    )
+    count = int(stats["total_count"] or 0)
+    flagged_count = int(stats["flagged_count"] or 0)
+
     if count > 0:
         delta_m = DeltaTable.forName(spark, gold_monitoring_table)
         (
@@ -206,7 +214,6 @@ def compute_merchant_risk_monitoring(
             .whenNotMatchedInsertAll()
             .execute()
         )
-        flagged_count = df_final.filter(F.col("is_excessive_dispute_flag")).count()
 
     return {
         "merchants_evaluated": count,

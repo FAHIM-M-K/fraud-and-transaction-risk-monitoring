@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+from sqlalchemy import bindparam, create_engine, text
 from payment_risk.common.config import LakehouseConfig
 
 
@@ -50,53 +51,6 @@ def sync_operational_risk_feedback(
     customers_updated = 0
     merchants_updated = 0
 
-    if not clean_url.startswith("sqlite"):
-        try:
-            import psycopg2
-
-            conn = psycopg2.connect(clean_url)
-            with conn:
-                with conn.cursor() as cur:
-                    if blocked_customers:
-                        cur.execute(
-                            """
-                            UPDATE customer_profiles
-                            SET account_status = 'SUSPENDED',
-                                risk_tier = 'BLOCKED',
-                                updated_at = CURRENT_TIMESTAMP
-                            WHERE customer_id = ANY(%s)
-                              AND account_status != 'SUSPENDED'
-                            """,
-                            (blocked_customers,),
-                        )
-                        customers_updated = cur.rowcount
-
-                    if flagged_merchants:
-                        cur.execute(
-                            """
-                            UPDATE merchants
-                            SET risk_tier = 'HIGH',
-                                updated_at = CURRENT_TIMESTAMP
-                            WHERE merchant_id = ANY(%s)
-                              AND risk_tier != 'HIGH'
-                            """,
-                            (flagged_merchants,),
-                        )
-                        merchants_updated = cur.rowcount
-            conn.close()
-
-            return {
-                "blocked_customers_identified": len(blocked_customers),
-                "flagged_merchants_identified": len(flagged_merchants),
-                "customers_suspended": customers_updated,
-                "merchants_flagged": merchants_updated,
-                "batch_date": batch_date,
-            }
-        except ImportError:
-            pass
-
-    from sqlalchemy import create_engine, text, bindparam
-
     connect_args = {"check_same_thread": False} if clean_url.startswith("sqlite") else {}
     engine = create_engine(clean_url, connect_args=connect_args)
 
@@ -135,3 +89,4 @@ def sync_operational_risk_feedback(
         "merchants_flagged": merchants_updated,
         "batch_date": batch_date,
     }
+

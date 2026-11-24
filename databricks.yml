@@ -23,3 +23,14 @@ targets:
       catalog_name: payment_risk
       env_prefix: ""
       secret_scope: grid_platform
+
+  # Production target template for multi-environment promotion
+  # prod:
+  #   mode: production
+  #   workspace:
+  #     host: https://<prod-workspace-url>
+  #     root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
+  #   variables:
+  #     catalog_name: payment_risk_prod
+  #     env_prefix: prod
+  #     secret_scope: grid_platform_prod

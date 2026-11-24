@@ -34,6 +34,7 @@ def score_batch_transactions(
     model_name_or_uri: Optional[str] = None,
     threshold_challenge: float = 0.40,
     threshold_block: float = 0.80,
+    allow_fallback: bool = True,
 ) -> Dict[str, Any]:
     gold_scored_table = f"{config.gold_schema}.scored_transactions"
     model_name = model_name_or_uri or f"{config.catalog_name}.ml.fraud_detector"
@@ -89,7 +90,16 @@ def score_batch_transactions(
             return pd.Series(probs, dtype="float64")
 
         df_scored_prob = df_features.withColumn("ml_fraud_probability", predict_fraud_prob_udf(*feature_cols))
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to load or apply MLflow model (%s). Using calibrated prior baseline (allow_fallback=%s).",
+            e,
+            allow_fallback,
+        )
+        if not allow_fallback:
+            raise RuntimeError(f"MLflow model failed to load and fallback is disabled: {e}") from e
+
         # Calibrated Bayesian prior based on industry baseline fraud prevalence (0.2%)
         df_scored_prob = df_features.withColumn(
             "ml_fraud_probability",

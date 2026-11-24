@@ -1,0 +1,77 @@
+name: Lakehouse CI/CD & Databricks Auto-Sync
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Unit Tests & Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pydantic pyyaml sqlalchemy
+
+      - name: Execute Pytest Test Suite
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m pytest tests mock_provider_service/tests -v
+
+  deploy:
+    name: Auto-Sync to Databricks Workspace
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Auto-Pull Latest Main into Databricks
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          REPO_ID: ${{ secrets.DATABRICKS_REPO_ID || '2405463907739063' }}
+        run: |
+          if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
+            echo "::error::DATABRICKS_HOST or DATABRICKS_TOKEN secret is missing in GitHub repository settings!"
+            echo "Please set them in Settings -> Secrets and variables -> Actions"
+            exit 1
+          fi
+
+          # Strip trailing slashes from host
+          CLEAN_HOST="${DATABRICKS_HOST%/}"
+
+          echo "Triggering Databricks Git Folder Auto-Pull for Repo ID: $REPO_ID on $CLEAN_HOST..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
+            -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"branch": "main"}' \
+            "$CLEAN_HOST/api/2.0/repos/$REPO_ID")
+
+          HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Databricks Workspace Git Folder successfully synced to latest commit on main!"
+            echo "Response: $HTTP_BODY"
+          else
+            echo "::error::Databricks Git Pull failed with HTTP status $HTTP_CODE"
+            echo "Details: $HTTP_BODY"
+            exit 1
+          fi
