@@ -79,9 +79,13 @@ def prepare_feature_dataframe(
         "is_geo_velocity_anomaly",
     )
 
-    df_m = spark.table(merchants_table).select(
-        F.col("merchant_id"),
-        F.coalesce(F.col("risk_tier"), F.lit("LOW")).alias("merchant_risk_tier"),
+    df_m = (
+        spark.table(merchants_table)
+        .filter(F.col("is_current") == True)
+        .select(
+            F.col("merchant_id"),
+            F.coalesce(F.col("risk_tier"), F.lit("LOW")).alias("merchant_risk_tier"),
+        )
     )
 
     df_joined = (

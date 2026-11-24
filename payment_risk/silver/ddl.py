@@ -2,6 +2,24 @@ from typing import Any
 from payment_risk.common.config import LakehouseConfig
 
 
+def _ensure_scd2_columns(spark: Any, table_name: str, sk_col: str, key_col: str) -> None:
+    """Adds SCD Type 2 tracking columns to existing dimension tables if missing."""
+    cols = set(spark.table(table_name).columns)
+    if "is_current" not in cols:
+        spark.sql(
+            f"ALTER TABLE {table_name} ADD COLUMNS "
+            f"({sk_col} STRING, valid_from TIMESTAMP, valid_to TIMESTAMP, is_current BOOLEAN)"
+        )
+        spark.sql(f"""
+            UPDATE {table_name}
+            SET {sk_col} = sha2(concat_ws('||', {key_col}, coalesce(cast(updated_at AS STRING), '')), 256),
+                valid_from = coalesce(updated_at, synced_at, current_timestamp()),
+                valid_to = NULL,
+                is_current = true
+            WHERE is_current IS NULL
+        """)
+
+
 def create_silver_infrastructure(spark: Any, config: LakehouseConfig) -> None:
     catalog = config.catalog_name
     silver = config.silver_schema
@@ -90,6 +108,7 @@ def create_silver_infrastructure(spark: Any, config: LakehouseConfig) -> None:
 
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {silver}.dim_merchants (
+      merchant_sk            STRING NOT NULL,
       merchant_id            STRING NOT NULL,
       merchant_name          STRING NOT NULL,
       category               STRING,
@@ -101,14 +120,19 @@ def create_silver_infrastructure(spark: Any, config: LakehouseConfig) -> None:
       is_deleted             BOOLEAN,
       created_at             TIMESTAMP,
       updated_at             TIMESTAMP,
-      synced_at              TIMESTAMP NOT NULL
+      synced_at              TIMESTAMP NOT NULL,
+      valid_from             TIMESTAMP NOT NULL,
+      valid_to               TIMESTAMP,
+      is_current             BOOLEAN NOT NULL
     )
     USING DELTA
     CLUSTER BY (merchant_id);
     """)
+    _ensure_scd2_columns(spark, f"{silver}.dim_merchants", "merchant_sk", "merchant_id")
 
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {silver}.dim_customers (
+      customer_sk            STRING NOT NULL,
       customer_id            STRING NOT NULL,
       email                  STRING,
       country                STRING,
@@ -119,11 +143,15 @@ def create_silver_infrastructure(spark: Any, config: LakehouseConfig) -> None:
       is_deleted             BOOLEAN,
       created_at             TIMESTAMP,
       updated_at             TIMESTAMP,
-      synced_at              TIMESTAMP NOT NULL
+      synced_at              TIMESTAMP NOT NULL,
+      valid_from             TIMESTAMP NOT NULL,
+      valid_to               TIMESTAMP,
+      is_current             BOOLEAN NOT NULL
     )
     USING DELTA
     CLUSTER BY (customer_id);
     """)
+    _ensure_scd2_columns(spark, f"{silver}.dim_customers", "customer_sk", "customer_id")
 
     spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {silver}.customer_risk_features (

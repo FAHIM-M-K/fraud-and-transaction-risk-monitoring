@@ -17,9 +17,13 @@ def compute_daily_fraud_summary(
     if target_batch_date:
         df_tx = df_tx.filter(F.col("batch_date") == target_batch_date)
 
-    df_m = spark.table(silver_merchants_table).select(
-        F.col("merchant_id"),
-        F.coalesce(F.col("country"), F.lit("UNKNOWN")).alias("merchant_country"),
+    df_m = (
+        spark.table(silver_merchants_table)
+        .filter(F.col("is_current") == True)
+        .select(
+            F.col("merchant_id"),
+            F.coalesce(F.col("country"), F.lit("UNKNOWN")).alias("merchant_country"),
+        )
     )
 
     df_joined = df_tx.join(df_m, "merchant_id", "left").withColumn(
@@ -125,7 +129,7 @@ def compute_merchant_risk_monitoring(
         & (F.col("batch_date") >= F.date_sub(F.to_date(F.lit(eval_date)), 30))
     )
 
-    df_m = spark.table(silver_merchants_table)
+    df_m = spark.table(silver_merchants_table).filter(F.col("is_current") == True)
 
     df_metrics = (
         df_window.groupBy("merchant_id")
@@ -246,7 +250,7 @@ def generate_high_risk_alerts(
         "is_spend_anomaly",
     )
 
-    df_m = spark.table(silver_merchants_table).select(
+    df_m = spark.table(silver_merchants_table).filter(F.col("is_current") == True).select(
         F.col("merchant_id"),
         F.col("merchant_name"),
     )

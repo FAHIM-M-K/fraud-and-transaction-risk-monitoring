@@ -186,6 +186,108 @@ def clean_and_sync_chargebacks(
     return count
 
 
+def _build_scd2_attr_hash(tracked_cols: list[str]) -> Any:
+    """Builds deterministic SHA-256 hash over tracked SCD Type 2 dimension columns."""
+    return F.sha2(
+        F.concat_ws(
+            "||",
+            *[F.coalesce(F.col(c).cast("string"), F.lit("__NULL__")) for c in tracked_cols],
+        ),
+        256,
+    )
+
+
+def _merge_scd2_dimension(
+    spark: Any,
+    df_incoming: Any,
+    target_table: str,
+    natural_key: str,
+    sk_col: str,
+    tracked_cols: list[str],
+) -> int:
+    """Executes idempotent 2-pass SCD Type 2 Delta MERGE preserving attribute change history."""
+    incoming_count = df_incoming.count()
+    if incoming_count == 0:
+        return 0
+
+    df_prepared = (
+        df_incoming
+        .withColumn(
+            sk_col,
+            F.sha2(
+                F.concat_ws(
+                    "||",
+                    F.col(natural_key),
+                    F.coalesce(F.col("updated_at").cast("string"), F.col("synced_at").cast("string")),
+                ),
+                256,
+            ),
+        )
+        .withColumn("valid_from", F.coalesce(F.col("updated_at"), F.col("synced_at")))
+        .withColumn("valid_to", F.lit(None).cast("timestamp"))
+        .withColumn("is_current", F.lit(True))
+        .withColumn("_incoming_hash", _build_scd2_attr_hash(tracked_cols))
+    )
+
+    df_active = (
+        spark.table(target_table)
+        .filter(F.col("is_current") == True)
+        .select(
+            F.col(natural_key).alias("_active_key"),
+            _build_scd2_attr_hash(tracked_cols).alias("_active_hash"),
+        )
+    )
+
+    df_diff = df_prepared.join(
+        df_active,
+        df_prepared[natural_key] == df_active["_active_key"],
+        "left",
+    )
+
+    df_changed = df_diff.filter(
+        F.col("_active_key").isNotNull() & (F.col("_incoming_hash") != F.col("_active_hash"))
+    ).drop("_active_key", "_active_hash", "_incoming_hash")
+
+    df_to_insert = df_diff.filter(
+        F.col("_active_key").isNull() | (F.col("_incoming_hash") != F.col("_active_hash"))
+    ).drop("_active_key", "_active_hash", "_incoming_hash")
+
+    delta_target = DeltaTable.forName(spark, target_table)
+
+    # Pass 1: Expire previous active records whose tracked attributes changed
+    if df_changed.count() > 0:
+        (
+            delta_target.alias("target")
+            .merge(
+                df_changed.alias("source"),
+                f"target.{natural_key} = source.{natural_key} AND target.is_current = true",
+            )
+            .whenMatchedUpdate(
+                set={
+                    "valid_to": "source.valid_from",
+                    "is_current": "false",
+                    "synced_at": "source.synced_at",
+                }
+            )
+            .execute()
+        )
+
+    # Pass 2: Insert new active versions and brand-new natural keys
+    insert_count = df_to_insert.count()
+    if insert_count > 0:
+        (
+            delta_target.alias("target")
+            .merge(
+                df_to_insert.alias("source"),
+                f"target.{natural_key} = source.{natural_key} AND target.is_current = true",
+            )
+            .whenNotMatchedInsertAll()
+            .execute()
+        )
+
+    return insert_count
+
+
 def sync_silver_dimensions(
     spark: Any,
     config: LakehouseConfig,
@@ -216,19 +318,17 @@ def sync_silver_dimensions(
         )
     )
 
-    m_count = df_m.count()
-    if m_count > 0:
-        delta_m = DeltaTable.forName(spark, silver_merchants)
-        (
-            delta_m.alias("target")
-            .merge(
-                df_m.alias("source"),
-                "target.merchant_id = source.merchant_id",
-            )
-            .whenMatchedUpdateAll()
-            .whenNotMatchedInsertAll()
-            .execute()
-        )
+    m_count = _merge_scd2_dimension(
+        spark=spark,
+        df_incoming=df_m,
+        target_table=silver_merchants,
+        natural_key="merchant_id",
+        sk_col="merchant_sk",
+        tracked_cols=[
+            "merchant_name", "category", "mcc", "country",
+            "risk_tier", "settlement_currency", "is_deleted",
+        ],
+    )
 
     bronze_customers = f"{config.bronze_schema}.raw_customers"
     silver_customers = f"{config.silver_schema}.dim_customers"
@@ -254,19 +354,17 @@ def sync_silver_dimensions(
         )
     )
 
-    c_count = df_c.count()
-    if c_count > 0:
-        delta_c = DeltaTable.forName(spark, silver_customers)
-        (
-            delta_c.alias("target")
-            .merge(
-                df_c.alias("source"),
-                "target.customer_id = source.customer_id",
-            )
-            .whenMatchedUpdateAll()
-            .whenNotMatchedInsertAll()
-            .execute()
-        )
+    c_count = _merge_scd2_dimension(
+        spark=spark,
+        df_incoming=df_c,
+        target_table=silver_customers,
+        natural_key="customer_id",
+        sk_col="customer_sk",
+        tracked_cols=[
+            "email", "country", "risk_tier", "account_status",
+            "lifetime_tx_count", "lifetime_fraud_count", "is_deleted",
+        ],
+    )
 
     return {
         "merchants_synced": m_count,

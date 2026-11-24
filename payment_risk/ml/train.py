@@ -50,7 +50,7 @@ def train_fraud_detection_model(
 
     for col in CATEGORICAL_FEATURES:
         train_pdf[col] = train_pdf[col].astype("category")
-        test_pdf[col] = test_pdf[col].astype("category")
+        test_pdf[col] = pd.Categorical(test_pdf[col], categories=train_pdf[col].cat.categories)
 
     iso_model = IsolationForest(
         n_estimators=100,
