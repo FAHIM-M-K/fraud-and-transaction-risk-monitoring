@@ -58,10 +58,12 @@ def train_fraud_detection_model(
         random_state=42,
         n_jobs=-1,
     )
-    iso_model.fit(train_pdf[num_base])
+    train_num_imputed = train_pdf[num_base].fillna(0.0)
+    test_num_imputed = test_pdf[num_base].fillna(0.0)
+    iso_model.fit(train_num_imputed)
 
-    train_pdf["iso_anomaly_score"] = -iso_model.score_samples(train_pdf[num_base])
-    test_pdf["iso_anomaly_score"] = -iso_model.score_samples(test_pdf[num_base])
+    train_pdf["iso_anomaly_score"] = -iso_model.score_samples(train_num_imputed)
+    test_pdf["iso_anomaly_score"] = -iso_model.score_samples(test_num_imputed)
 
     full_feature_cols = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 
