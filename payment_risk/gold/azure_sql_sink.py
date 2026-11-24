@@ -26,15 +26,11 @@ def write_table_to_azure_sql(
     mode: str = "overwrite",
 ) -> int:
     writer = (
-        df.write.format("jdbc")
+        df.write.format("sqlserver")
         .option("url", jdbc_url)
         .option("dbtable", table_name)
         .option("user", connection_properties["user"])
         .option("password", connection_properties["password"])
-        .option("driver", connection_properties["driver"])
-        .option("batchsize", connection_properties.get("batchsize", "10000"))
-        .option("isolationLevel", connection_properties.get("isolationLevel", "READ_UNCOMMITTED"))
-        .option("tableLock", connection_properties.get("tableLock", "true"))
     )
 
     if mode == "overwrite":

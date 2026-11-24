@@ -21,7 +21,7 @@ def test_write_table_to_azure_sql():
     mock_df = MagicMock()
     mock_df.count.return_value = 150
     mock_writer = MagicMock()
-    mock_df.write.format.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value = mock_writer
+    mock_df.write.format.return_value.option.return_value.option.return_value.option.return_value.option.return_value = mock_writer
     mock_writer.option.return_value.mode.return_value = mock_writer
 
     props = get_azure_sql_connection_properties("user", "pass")
@@ -43,7 +43,7 @@ def test_publish_gold_mart_to_azure_sql():
     mock_spark.table.return_value = mock_df
 
     mock_writer = MagicMock()
-    mock_df.write.format.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value.option.return_value = mock_writer
+    mock_df.write.format.return_value.option.return_value.option.return_value.option.return_value.option.return_value = mock_writer
     mock_writer.option.return_value.mode.return_value = mock_writer
 
     config = LakehouseConfig(catalog_name="payment_risk")
