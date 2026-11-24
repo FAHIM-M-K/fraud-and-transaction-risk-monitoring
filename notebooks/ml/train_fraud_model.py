@@ -2,6 +2,9 @@
 # MAGIC %pip install -q lightgbm xgboost scikit-learn
 
 # COMMAND ----------
+import os
+os.environ["MLFLOW_REGISTRY_URI"] = "databricks-uc"
+
 from payment_risk.common.config import resolve_lakehouse_config
 from payment_risk.ml.train import train_fraud_detection_model
 

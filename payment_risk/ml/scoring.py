@@ -53,8 +53,16 @@ def score_batch_transactions(
 
     model_version = "v1.0.0-champion"
     try:
+        import os
         import mlflow
         from mlflow.tracking import MlflowClient
+
+        if "MLFLOW_REGISTRY_URI" not in os.environ:
+            os.environ["MLFLOW_REGISTRY_URI"] = "databricks-uc"
+        try:
+            mlflow.set_registry_uri("databricks-uc")
+        except Exception:
+            pass
 
         client = MlflowClient()
         experiment = client.get_experiment_by_name("/Shared/payment_risk_fraud_ml")

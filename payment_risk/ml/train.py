@@ -78,6 +78,14 @@ def train_fraud_detection_model(
     neg_count = len(y_train) - pos_count
     scale_weight = float(neg_count) / max(1.0, float(pos_count))
 
+    import os
+    if "MLFLOW_REGISTRY_URI" not in os.environ:
+        os.environ["MLFLOW_REGISTRY_URI"] = "databricks-uc"
+    try:
+        mlflow.set_registry_uri("databricks-uc")
+    except Exception:
+        pass
+
     try:
         mlflow.set_experiment(experiment_name)
     except Exception:
