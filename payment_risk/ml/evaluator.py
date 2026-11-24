@@ -34,27 +34,32 @@ def calculate_precision_recall_curve(
 
 
 def calculate_pr_auc(y_true: List[int], y_prob: List[float], steps: int = 100) -> float:
+    """Computes exact step-wise Average Precision (PR-AUC) matching sklearn.metrics.average_precision_score."""
     total_pos = sum(y_true)
     if total_pos == 0 or len(y_true) == 0:
         return 0.0
 
-    thresholds = [i / float(steps) for i in range(steps + 1)]
-    pr_points = calculate_precision_recall_curve(y_true, y_prob, thresholds)
+    paired = sorted(zip(y_prob, y_true), key=lambda x: x[0], reverse=True)
+    tp = 0
+    fp = 0
+    prev_recall = 0.0
+    ap = 0.0
+    idx = 0
+    n = len(paired)
+    while idx < n:
+        score = paired[idx][0]
+        while idx < n and paired[idx][0] == score:
+            if paired[idx][1] == 1:
+                tp += 1
+            else:
+                fp += 1
+            idx += 1
+        recall = tp / float(total_pos)
+        precision = tp / float(tp + fp)
+        ap += (recall - prev_recall) * precision
+        prev_recall = recall
 
-    pr_points.sort(key=lambda x: x[1])
-
-    area = 0.0
-    for i in range(1, len(pr_points)):
-        r0 = pr_points[i - 1][1]
-        r1 = pr_points[i][1]
-        p0 = pr_points[i - 1][0]
-        p1 = pr_points[i][0]
-        width = r1 - r0
-        if width > 0:
-            avg_p = (p0 + p1) / 2.0
-            area += width * avg_p
-
-    return round(min(1.0, max(0.0, area)), 4)
+    return round(min(1.0, max(0.0, ap)), 4)
 
 
 def calculate_recall_at_precision(
@@ -63,13 +68,29 @@ def calculate_recall_at_precision(
     min_precision: float = 0.90,
     steps: int = 100,
 ) -> float:
-    thresholds = [i / float(steps) for i in range(steps + 1)]
-    pr_points = calculate_precision_recall_curve(y_true, y_prob, thresholds)
+    total_pos = sum(y_true)
+    if total_pos == 0 or len(y_true) == 0:
+        return 0.0
 
-    qualifying_recalls = [rec for prec, rec, _ in pr_points if prec >= min_precision]
-    if qualifying_recalls:
-        return max(qualifying_recalls)
-    return 0.0
+    paired = sorted(zip(y_prob, y_true), key=lambda x: x[0], reverse=True)
+    tp = 0
+    fp = 0
+    best_recall = 0.0
+    idx = 0
+    n = len(paired)
+    while idx < n:
+        score = paired[idx][0]
+        while idx < n and paired[idx][0] == score:
+            if paired[idx][1] == 1:
+                tp += 1
+            else:
+                fp += 1
+            idx += 1
+        precision = tp / float(tp + fp)
+        if precision >= min_precision:
+            best_recall = max(best_recall, round(tp / float(total_pos), 4))
+
+    return best_recall
 
 
 def calculate_dollar_weighted_recall(
@@ -95,18 +116,33 @@ def calculate_dollar_weighted_recall_at_precision(
     min_precision: float = 0.90,
     steps: int = 100,
 ) -> float:
-    thresholds = [i / float(steps) for i in range(steps + 1)]
-    pr_points = calculate_precision_recall_curve(y_true, y_prob, thresholds)
-
-    qualifying_thresholds = [t for prec, _, t in pr_points if prec >= min_precision]
-    if not qualifying_thresholds:
+    total_fraud_dollars = sum(amt for yt, amt in zip(y_true, amounts_cents) if yt == 1)
+    if total_fraud_dollars == 0 or len(y_true) == 0:
         return 0.0
 
-    dollar_recalls = [
-        calculate_dollar_weighted_recall(y_true, y_prob, amounts_cents, t)
-        for t in qualifying_thresholds
-    ]
-    return max(dollar_recalls) if dollar_recalls else 0.0
+    paired = sorted(zip(y_prob, y_true, amounts_cents), key=lambda x: x[0], reverse=True)
+    tp = 0
+    fp = 0
+    caught_dollars = 0
+    best_dollar_recall = 0.0
+    idx = 0
+    n = len(paired)
+    while idx < n:
+        score = paired[idx][0]
+        while idx < n and paired[idx][0] == score:
+            if paired[idx][1] == 1:
+                tp += 1
+                caught_dollars += paired[idx][2]
+            else:
+                fp += 1
+            idx += 1
+        precision = tp / float(tp + fp)
+        if precision >= min_precision:
+            best_dollar_recall = max(
+                best_dollar_recall, round(caught_dollars / float(total_fraud_dollars), 4)
+            )
+
+    return best_dollar_recall
 
 
 def calculate_brier_score(y_true: List[int], y_prob: List[float]) -> float:
