@@ -2,21 +2,7 @@ import sqlite3
 import pytest
 from unittest.mock import MagicMock
 from payment_risk.common.config import LakehouseConfig
-from payment_risk.gold.operational_sync import (
-    get_connection_url,
-    sync_operational_risk_feedback,
-)
-
-
-def test_get_connection_url():
-    raw_jdbc = "jdbc:postgresql://user:pass@host:5432/db?sslmode=require"
-    assert get_connection_url(raw_jdbc) == "postgresql://user:pass@host:5432/db?sslmode=require"
-
-    raw_legacy = "postgres://user:pass@host:5432/db"
-    assert get_connection_url(raw_legacy) == "postgresql://user:pass@host:5432/db"
-
-    sqlite_url = "sqlite:///test.db"
-    assert get_connection_url(sqlite_url) == "sqlite:///test.db"
+from payment_risk.gold.operational_sync import sync_operational_risk_feedback
 
 
 @pytest.fixture

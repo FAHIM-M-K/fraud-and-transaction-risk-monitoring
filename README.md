@@ -61,5 +61,5 @@ Gives risk analysts a prioritized queue of flagged transactions with travel spee
 
 ## Testing & CI/CD
 
-- **Unit Tests:** 57 `pytest` tests covering data validation rules, Haversine and Z-score math, dollar-weighted model evaluation, 3-way risk scoring, and idempotent operational sync (`python -m pytest tests mock_provider_service/tests -v`).
+- **Unit Tests:** `pytest` suite covering data validation rules, Haversine and Z-score math, dollar-weighted model evaluation, 3-way risk scoring, and idempotent operational sync (`python -m pytest tests -v`).
 - **CI/CD:** GitHub Actions runs the test suite on every push and automatically syncs `main` into the Databricks workspace via the Repos REST API.

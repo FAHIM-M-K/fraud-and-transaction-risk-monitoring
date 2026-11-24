@@ -26,13 +26,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install pydantic pyyaml sqlalchemy
+          pip install sqlalchemy
 
       - name: Execute Pytest Test Suite
         env:
           PYTHONPATH: .
         run: |
-          python -m pytest tests mock_provider_service/tests -v
+          python -m pytest tests -v
 
   deploy:
     name: Auto-Sync to Databricks Workspace

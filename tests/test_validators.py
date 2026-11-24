@@ -24,43 +24,25 @@ def base_valid_tx():
 
 
 def test_valid_transaction(base_valid_tx):
-    rejects = validate_transaction_dict(base_valid_tx)
-    assert rejects == []
+    assert validate_transaction_dict(base_valid_tx) == []
 
 
-def test_reject_null_tx_id(base_valid_tx):
-    base_valid_tx["tx_id"] = "   "
-    rejects = validate_transaction_dict(base_valid_tx)
-    assert REJECT_ERR_NULL_TX_ID in rejects
-
-
-def test_reject_negative_amount(base_valid_tx):
-    base_valid_tx["amount_cents"] = -500
-    rejects = validate_transaction_dict(base_valid_tx)
-    assert REJECT_ERR_NEGATIVE_AMOUNT in rejects
-
-
-def test_reject_invalid_currency(base_valid_tx):
-    base_valid_tx["currency"] = "XYZ"
-    rejects = validate_transaction_dict(base_valid_tx)
-    assert REJECT_ERR_INVALID_CURRENCY in rejects
-
-
-def test_reject_malformed_timestamp(base_valid_tx):
-    base_valid_tx["timestamp"] = "15/10/2026 14:30"
-    rejects = validate_transaction_dict(base_valid_tx)
-    assert REJECT_ERR_MALFORMED_TIMESTAMP in rejects
-
-
-def test_reject_invalid_latitude(base_valid_tx):
-    base_valid_tx["latitude"] = 95.0
-    rejects = validate_transaction_dict(base_valid_tx)
-    assert REJECT_ERR_INVALID_GEO in rejects
+@pytest.mark.parametrize(
+    "field,bad_value,expected_code",
+    [
+        ("tx_id", "   ", REJECT_ERR_NULL_TX_ID),
+        ("amount_cents", -500, REJECT_ERR_NEGATIVE_AMOUNT),
+        ("currency", "XYZ", REJECT_ERR_INVALID_CURRENCY),
+        ("timestamp", "15/10/2026 14:30", REJECT_ERR_MALFORMED_TIMESTAMP),
+        ("latitude", 95.0, REJECT_ERR_INVALID_GEO),
+    ],
+)
+def test_quarantine_validation_rules(base_valid_tx, field, bad_value, expected_code):
+    base_valid_tx[field] = bad_value
+    assert expected_code in validate_transaction_dict(base_valid_tx)
 
 
 def test_reject_batch_duplicate_tx_id(base_valid_tx):
     seen = set()
-    r1 = validate_transaction_dict(base_valid_tx, seen_tx_ids=seen)
-    assert r1 == []
-    r2 = validate_transaction_dict(base_valid_tx, seen_tx_ids=seen)
-    assert REJECT_ERR_DUPLICATE_TX in r2
+    assert validate_transaction_dict(base_valid_tx, seen_tx_ids=seen) == []
+    assert REJECT_ERR_DUPLICATE_TX in validate_transaction_dict(base_valid_tx, seen_tx_ids=seen)
