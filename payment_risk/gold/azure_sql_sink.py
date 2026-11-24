@@ -3,34 +3,23 @@ from pyspark.sql import DataFrame
 from payment_risk.common.config import LakehouseConfig
 
 
-def get_azure_sql_connection_properties(
-    username: str,
-    password: str,
-    batch_size: int = 10000,
-) -> Dict[str, str]:
-    return {
-        "user": username,
-        "password": password,
-        "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-        "batchsize": str(batch_size),
-        "isolationLevel": "READ_UNCOMMITTED",
-        "tableLock": "true",
-    }
-
-
 def write_table_to_azure_sql(
     df: DataFrame,
-    jdbc_url: str,
+    server: str,
+    database: str,
     table_name: str,
-    connection_properties: Dict[str, str],
+    username: str,
+    password: str,
     mode: str = "overwrite",
 ) -> int:
     writer = (
         df.write.format("sqlserver")
-        .option("url", jdbc_url)
+        .option("host", server)
+        .option("port", "1433")
+        .option("database", database)
         .option("dbtable", table_name)
-        .option("user", connection_properties["user"])
-        .option("password", connection_properties["password"])
+        .option("user", username)
+        .option("password", password)
     )
 
     if mode == "overwrite":
@@ -50,16 +39,6 @@ def publish_gold_mart_to_azure_sql(
     username: str,
     password: str,
 ) -> Dict[str, int]:
-    jdbc_url = (
-        f"jdbc:sqlserver://{server}:1433;"
-        f"database={database};"
-        f"encrypt=true;"
-        f"trustServerCertificate=false;"
-        f"hostNameInCertificate=*.database.windows.net;"
-        f"loginTimeout=30;"
-    )
-    props = get_azure_sql_connection_properties(username, password)
-
     results: Dict[str, int] = {}
 
     tables_to_sync = [
@@ -73,7 +52,15 @@ def publish_gold_mart_to_azure_sql(
 
     for source_table, target_table in tables_to_sync:
         df = spark.table(source_table)
-        count = write_table_to_azure_sql(df, jdbc_url, target_table, props, mode="overwrite")
+        count = write_table_to_azure_sql(
+            df=df,
+            server=server,
+            database=database,
+            table_name=target_table,
+            username=username,
+            password=password,
+            mode="overwrite",
+        )
         results[target_table] = count
 
     return results
