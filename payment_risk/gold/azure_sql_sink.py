@@ -50,10 +50,11 @@ def publish_gold_mart_to_azure_sql(
         (f"{config.gold_schema}.scored_transactions", "dbo.fact_scored_transactions"),
     ]
 
+    scd2_cols = {"merchant_sk", "customer_sk", "valid_from", "valid_to", "is_current"}
     for source_table, target_table in tables_to_sync:
         df = spark.table(source_table)
         if "is_current" in df.columns:
-            df = df.filter("is_current = true")
+            df = df.filter("is_current = true").drop(*[c for c in scd2_cols if c in df.columns])
         count = write_table_to_azure_sql(
             df=df,
             server=server,
