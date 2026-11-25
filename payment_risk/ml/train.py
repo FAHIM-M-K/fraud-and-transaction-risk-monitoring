@@ -101,9 +101,9 @@ def train_fraud_detection_model(
 
         lgb_params = {
             "objective": "binary",
-            "metric": "auc",
+            "metric": "average_precision",
             "boosting_type": "gbdt",
-            "n_estimators": 150,
+            "n_estimators": 200,
             "learning_rate": 0.05,
             "num_leaves": 31,
             "max_depth": 6,
@@ -113,13 +113,14 @@ def train_fraud_detection_model(
             "colsample_bytree": 0.8,
             "random_state": 42,
             "n_jobs": -1,
+            "verbose": -1,
         }
         lgb_model = lgb.LGBMClassifier(**lgb_params)
         lgb_model.fit(
             X_train,
             y_train,
             eval_set=[(X_test, y_test)],
-            callbacks=[lgb.early_stopping(stopping_rounds=20, verbose=False)],
+            callbacks=[lgb.early_stopping(stopping_rounds=25, verbose=False)],
         )
         lgb_prob = lgb_model.predict_proba(X_test)[:, 1].tolist()
         lgb_metrics = evaluate_model_performance(y_test.tolist(), lgb_prob, amounts_test)
@@ -127,7 +128,7 @@ def train_fraud_detection_model(
         xgb_params = {
             "objective": "binary:logistic",
             "eval_metric": "aucpr",
-            "n_estimators": 150,
+            "n_estimators": 200,
             "learning_rate": 0.05,
             "max_depth": 6,
             "scale_pos_weight": scale_weight,
@@ -135,6 +136,7 @@ def train_fraud_detection_model(
             "colsample_bytree": 0.8,
             "random_state": 42,
             "enable_categorical": True,
+            "early_stopping_rounds": 25,
             "n_jobs": -1,
         }
         xgb_model = xgb.XGBClassifier(**xgb_params)
